@@ -14,6 +14,8 @@ env/
 
 # Local data and generated outputs
 data/
+models/*.task
+models/*.tflite
 results/
 outputs/
 runs/
