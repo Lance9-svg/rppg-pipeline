@@ -17,6 +17,7 @@ data/
 models/*.task
 models/*.tflite
 results/
+results_v2/
 outputs/
 runs/
 *.mp4

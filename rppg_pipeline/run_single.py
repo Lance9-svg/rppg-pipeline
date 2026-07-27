@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from rppg_pipeline.evaluation import EvaluationConfig, process_ubfc_evaluation
 from rppg_pipeline.rgb_trace import process_video_rgb_trace
 from rppg_pipeline.rppg import RPPGConfig, process_rppg_from_outputs
 from rppg_pipeline.video import read_video_metadata
@@ -94,6 +95,20 @@ def parse_args() -> argparse.Namespace:
         default=1.0,
         help="Sliding window step for HR curve estimates.",
     )
+    # Enable UBFC contact-PPG ground-truth evaluation.
+    parser.add_argument(
+        "--evaluate",
+        action="store_true",
+        help="Run the legacy coarse-grid evaluation used by the bias audit.",
+    )
+    # UBFC ground_truth.txt path.
+    parser.add_argument(
+        "--ground-truth",
+        help=(
+            "Path to UBFC ground_truth.txt for evaluation. "
+            "Defaults to ground_truth.txt next to --video."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -141,6 +156,29 @@ def main() -> None:
                 hr_estimator=args.hr_estimator,
                 hr_window_sec=args.hr_window_sec,
                 hr_step_sec=args.hr_step_sec,
+            ),
+        )
+
+    if args.evaluate:
+        ground_truth_path = (
+            Path(args.ground_truth)
+            if args.ground_truth
+            else Path(args.video).with_name("ground_truth.txt")
+        )
+        if not ground_truth_path.exists():
+            raise FileNotFoundError(
+                "Ground truth not found. Pass --ground-truth or place "
+                f"ground_truth.txt next to the video: {ground_truth_path}"
+            )
+        # Preserve the original coarse-grid evaluation as a legacy comparator.
+        process_ubfc_evaluation(
+            out_dir=out_dir,
+            ground_truth_path=ground_truth_path,
+            fps=metadata.fps,
+            config=EvaluationConfig(
+                bandpass_low_hz=args.bandpass_low,
+                bandpass_high_hz=args.bandpass_high,
+                hr_estimator=args.hr_estimator,
             ),
         )
 

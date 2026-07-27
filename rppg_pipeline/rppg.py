@@ -1,4 +1,4 @@
-# CHROM/POS rPPG signal processing and heart-rate export.
+"""Legacy full-segment CHROM/POS retained for the bias-audit experiment."""
 
 from __future__ import annotations
 
