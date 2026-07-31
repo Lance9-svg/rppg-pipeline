@@ -1,21 +1,23 @@
-# rPPG Research Pipeline
+# rPPG research pipeline
 
-This project studies whether reference-independent, interpretable
-signal-quality information can characterise the reliability of classical rPPG
-heart-rate estimates under bias-aware and subject-independent evaluation. The
-repository currently contains the completed contact-PPG reference and formal
+This project tests whether interpretable, reference-independent signal-quality
+features can predict the reliability of classical rPPG heart-rate estimates
+for unseen subjects. Evaluation is subject-independent and includes checks for
+evaluation bias.
+
+The repository currently contains the completed contact-PPG reference and
 POS/CHROM evaluation stages.
 
 ## Dataset
 
 The project uses Dataset 2 of the [UBFC-rPPG dataset](https://sites.google.com/view/ybenezeth/ubfcrppg). The videos and contact-PPG files are obtained from the dataset authors for research purposes and are not redistributed in this repository.
 
-## Completed Experiments
+## Completed experiments
 
-### Phase 1: Contact-PPG Reference
+### Phase 1: contact-PPG reference
 
-Phase 1 constructs a timestamp-aware heart-rate reference independently of the
-rPPG estimates:
+Phase 1 builds a timestamp-aware heart-rate reference without reading the rPPG
+estimates:
 
 1. Read the contact-PPG signal, sensor heart rate, and timestamps.
 2. Resolve duplicate and non-uniform timestamps and resample the signal.
@@ -26,14 +28,14 @@ rPPG estimates:
 6. Write the aligned reference windows, subject manifest, quality-control
    table, and configuration.
 
-### Phase 2: Window-Aligned POS/CHROM Evaluation
+### Phase 2: window-aligned POS/CHROM evaluation
 
 Phase 2 reuses the existing facial RGB traces and the exact Phase 1 windows:
 
 1. Load the RGB and source-quality traces for each subject.
 2. Process `full_face_inner`, `forehead`, `left_cheek`, `right_cheek`, and
    `cheeks_mean`.
-3. Extract formal POS and CHROM signals for every region.
+3. Extract POS and CHROM signals for every region.
 4. Estimate window-level heart rate and preserve explicit non-estimable
    statuses.
 5. Calculate spectral, motion, ROI-quality, cross-method, and cross-region
@@ -41,29 +43,29 @@ Phase 2 reuses the existing facial RGB traces and the exact Phase 1 windows:
 6. Write the window-level results, subject quality-control table, method/ROI
    summary, runtime, configuration, and run summary.
 
-## Current Status
+## Current status
 
 | Phase | Status | Scope | Evidence |
 |---|---|---|---|
 | Phase 1 | Complete | Contact-PPG reference construction | [Validation report](docs/phase1_validation_report.md) |
 | Phase 2 | Complete | Window-aligned POS/CHROM evaluation | [Validation report](docs/phase2_validation_report.md) |
 
-## Automated Verification
+## Automated verification
 
 The test suite covers synthetic heart-rate recovery, timestamp preparation,
 constant and invalid signals, ROI construction, RGB channel ordering, window
 alignment, quality-gate behaviour, subject discovery, batch processing, and
 expected output generation.
 
-## Repository Structure
+## Repository structure
 
 ```text
 rppg_pipeline/
   ubfc.py             UBFC subject discovery and ground-truth parsing
-  ppg_reference.py    formal Phase 1 contact-PPG reference
-  run_phase1.py       formal Phase 1 dataset runner
-  standard_rppg.py    formal window-aligned POS/CHROM processing
-  run_phase2.py       formal Phase 2 dataset runner
+  ppg_reference.py    Phase 1 contact-PPG reference
+  run_phase1.py       Phase 1 dataset runner
+  standard_rppg.py    window-aligned POS/CHROM processing
+  run_phase2.py       Phase 2 dataset runner
   video.py            video metadata
   face_landmarks.py   MediaPipe face landmarks
   roi.py              fixed facial ROIs
@@ -76,12 +78,12 @@ tests/                automated tests
 docs/                 phase validation reports
 ```
 
-`ppg_reference.py` and `standard_rppg.py` contain the formal Phase 1 and
-Phase 2 implementations. `rppg.py`, `evaluation.py`, `run_single.py`, and
-`run_batch.py` are retained as legacy processing and comparison paths rather
-than the formal phase implementations.
+`ppg_reference.py` and `standard_rppg.py` contain the Phase 1 and Phase 2
+implementations used for the current experiments. `rppg.py`, `evaluation.py`,
+`run_single.py`, and `run_batch.py` remain available for preprocessing and
+bias comparisons.
 
-## Environment Setup
+## Environment setup
 
 ```powershell
 python -m venv .venv
@@ -89,7 +91,7 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
 ```
 
-## Run Automated Checks
+## Run automated checks
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest
