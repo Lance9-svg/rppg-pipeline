@@ -2,23 +2,16 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
-import subprocess
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
 import cv2
-import mediapipe as mp
 import numpy as np
 import pandas as pd
 
 from rppg_pipeline.face_landmarks import (
-    FACE_LANDMARKER_NUM_FACES,
-    MIN_FACE_DETECTION_CONFIDENCE,
-    MIN_FACE_PRESENCE_CONFIDENCE,
-    MIN_TRACKING_CONFIDENCE,
     FaceLandmarkDetector,
     landmarks_to_pixels,
 )
@@ -29,7 +22,6 @@ from rppg_pipeline.roi import (
     create_roi_masks,
     face_geometry,
     frame_timestamp,
-    landmark_sets_for_metadata,
     make_cheeks_mean,
     make_invalid_measurement,
     measure_roi,
@@ -241,19 +233,9 @@ def process_video_rgb_trace(
         config=config,
     )
 
-    # Write summary JSON files for reproducibility and audit.
+    # Keep one concise trace-quality summary for local visual verification.
     quality_summary = build_quality_summary(trace_long_df, segments_df, debug_indices)
     _write_json(out_path / "quality_summary.json", quality_summary)
-    _write_json(
-        out_path / "run_metadata.json",
-        build_run_metadata(
-            model_path=model_path,
-            metadata=metadata,
-            config=config,
-            debug_every=debug_every,
-            max_frames=max_frames,
-        ),
-    )
 
 
 def build_valid_segments(
@@ -428,53 +410,6 @@ def build_quality_summary(
             roi: dict(counts) for roi, counts in invalid_counts.items()
         },
         "debug_frame_indices": debug_indices,
-    }
-
-
-def build_run_metadata(
-    model_path: str | Path,
-    metadata: VideoMetadata,
-    config: ROIConfig,
-    debug_every: int,
-    max_frames: int | None,
-) -> dict[str, object]:
-    # Store settings needed to reproduce the run.
-    model = Path(model_path)
-    return {
-        "video_metadata": metadata.to_dict(),
-        "cli": {
-            "model": str(model),
-            "debug_every": debug_every,
-            "max_frames": max_frames,
-        },
-        "versions": {
-            # Library versions help explain future output differences.
-            "mediapipe": mp.__version__,
-            "opencv": cv2.__version__,
-            "numpy": np.__version__,
-            "pandas": pd.__version__,
-        },
-        "model": {
-            "path": str(model),
-            # Hash records the exact model file used.
-            "sha256": _sha256(model) if model.exists() else None,
-        },
-        "face_landmarker": {
-            "num_faces": FACE_LANDMARKER_NUM_FACES,
-            "min_face_detection_confidence": MIN_FACE_DETECTION_CONFIDENCE,
-            "min_face_presence_confidence": MIN_FACE_PRESENCE_CONFIDENCE,
-            "min_tracking_confidence": MIN_TRACKING_CONFIDENCE,
-        },
-        "roi": {
-            **config.to_dict(),
-            "landmark_sets": landmark_sets_for_metadata(),
-        },
-        "timebase": {
-            "fps": metadata.fps,
-            "assume_constant_frame_rate": True,
-            "timestamp_source": "frame_idx_div_fps",
-        },
-        "git_commit": _git_commit(),
     }
 
 
@@ -734,27 +669,3 @@ def _render_debug_frame(
 def _write_json(path: Path, payload: dict[str, object]) -> None:
     # Write a readable JSON file.
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=True), encoding="utf-8")
-
-
-def _sha256(path: Path) -> str:
-    # Hash a model file for reproducibility metadata.
-    digest = hashlib.sha256()
-    with path.open("rb") as file:
-        for block in iter(lambda: file.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
-
-
-def _git_commit() -> str | None:
-    # Read the current Git commit when available.
-    try:
-        result = subprocess.run(
-            # git rev-parse HEAD returns the current commit SHA.
-            ["git", "rev-parse", "HEAD"],
-            capture_output=True,
-            check=True,
-            text=True,
-        )
-    except Exception:
-        return None
-    return result.stdout.strip()

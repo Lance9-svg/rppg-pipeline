@@ -12,18 +12,26 @@ __pycache__/
 venv/
 env/
 
-# Local data and generated outputs
+# Local datasets, models, and generated outputs
 data/
-models/*.task
-models/*.tflite
+datasets/
+raw_data/
+models/
 results/
 results_v2/
 outputs/
 runs/
+artifacts/
+local_outputs/
+figures/
+plots/
+roi_debug/
 *.mp4
 *.mov
 *.avi
 *.mkv
+*.task
+*.tflite
 
 # Logs and local config
 *.log

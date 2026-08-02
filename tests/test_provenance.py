@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import subprocess
 from datetime import UTC, datetime
+from importlib.metadata import version
 from pathlib import Path
 
 import pytest
@@ -48,6 +49,7 @@ def test_build_run_manifest_records_reproducible_metadata(
         "phase3",
         [second.resolve(), first.resolve()],
         {"methods": ["CHROM", "POS"], "threshold_bpm": 5.0},
+        repository_root=repo,
     )
 
     created_at = datetime.fromisoformat(str(manifest["created_at_utc"]))
@@ -57,6 +59,16 @@ def test_build_run_manifest_records_reproducible_metadata(
     assert manifest["git_commit"] == commit
     assert manifest["git_dirty"] is False
     assert str(manifest["python_version"]).startswith("3.")
+    assert manifest["package_versions"] == {
+        name: version(name)
+        for name in (
+            "mediapipe",
+            "numpy",
+            "opencv-contrib-python",
+            "pandas",
+            "scipy",
+        )
+    }
     assert manifest["configuration"] == {
         "methods": ["CHROM", "POS"],
         "threshold_bpm": 5.0,
@@ -82,14 +94,50 @@ def test_build_run_manifest_reports_dirty_repository(
     artifact.write_bytes(b"value\n2\n")
     monkeypatch.chdir(repo)
 
-    manifest = build_run_manifest("phase3-smoke", [artifact], {})
+    manifest = build_run_manifest(
+        "phase3-smoke",
+        [artifact],
+        {},
+        repository_root=repo,
+    )
 
     assert manifest["git_dirty"] is True
 
 
 def test_build_run_manifest_rejects_missing_input(tmp_path: Path) -> None:
+    repo = _initialise_git_repository(tmp_path)
     with pytest.raises(FileNotFoundError):
-        build_run_manifest("phase3", [tmp_path / "missing.csv"], {})
+        build_run_manifest(
+            "phase3",
+            [tmp_path / "missing.csv"],
+            {},
+            repository_root=repo,
+        )
+
+
+def test_build_run_manifest_uses_explicit_repository_outside_cwd(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = _initialise_git_repository(tmp_path)
+    artifact = repo / "input.csv"
+    artifact.write_text("value\n1\n", encoding="utf-8")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-m", "add input")
+    expected_commit = _git(repo, "rev-parse", "HEAD").stdout.strip()
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+
+    manifest = build_run_manifest(
+        "experiment",
+        [artifact],
+        {},
+        repository_root=repo,
+    )
+
+    assert manifest["git_commit"] == expected_commit
+    assert manifest["git_dirty"] is False
 
 
 def _initialise_git_repository(path: Path) -> Path:
