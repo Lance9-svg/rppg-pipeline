@@ -63,6 +63,13 @@ adds pytest and Ruff. No Node.js application, `package.json`, Conda
 external API service was found. The CLI is CPU-based but full video processing
 is compute- and storage-intensive.
 
+The complete new-device recovery prompt is stored in
+`NEW_DEVICE_BOOTSTRAP_PROMPT_ZH.md`. Project-specific Codex Skills are backed
+up separately in the private repository
+`https://github.com/Lance9-svg/codex-research-skills.git`. System and
+plugin-provided Skills are not copied; install them through Codex on the new
+device.
+
 On a new Windows machine:
 
 ```powershell
