@@ -6,6 +6,11 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
 
 # Virtual environments
 .venv/
@@ -26,6 +31,7 @@ local_outputs/
 figures/
 plots/
 roi_debug/
+node_modules/
 *.mp4
 *.mov
 *.avi
@@ -37,6 +43,14 @@ roi_debug/
 *.log
 .env
 .env.*
+.envrc
+.direnv/
+.secrets/
+*.pem
+*.key
+*.p12
+credentials.local.json
+secrets.local.*
 
 # OS / editor
 .DS_Store
