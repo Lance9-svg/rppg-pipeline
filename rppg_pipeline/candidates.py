@@ -68,10 +68,10 @@ def build_candidate_table(
         & np.isfinite(rppg_hr)
         & np.isfinite(absolute_error)
     )
-    candidates["primary_analysis_eligible"] = primary
+    candidates["eligible_model"] = primary
 
     for threshold in ERROR_THRESHOLDS_BPM:
-        column = f"error_gt_{int(threshold)}bpm"
+        column = f"unreliable_{int(threshold)}bpm"
         labels = pd.Series(pd.NA, index=candidates.index, dtype="boolean")
         labels.loc[primary] = absolute_error.loc[primary].gt(threshold)
         candidates[column] = labels
@@ -90,10 +90,10 @@ def validate_candidate_table(
     _require_columns(
         candidates,
         {
-            "primary_analysis_eligible",
-            "error_gt_3bpm",
-            "error_gt_5bpm",
-            "error_gt_10bpm",
+            "eligible_model",
+            "unreliable_3bpm",
+            "unreliable_5bpm",
+            "unreliable_10bpm",
         },
         "Candidate table",
     )
@@ -109,11 +109,11 @@ def validate_candidate_table(
         & np.isfinite(rppg_hr)
         & np.isfinite(absolute_error)
     )
-    if not candidates["primary_analysis_eligible"].equals(expected_primary):
-        raise ValueError("Primary analysis eligibility is inconsistent")
+    if not candidates["eligible_model"].equals(expected_primary):
+        raise ValueError("Model eligibility is inconsistent")
 
     for threshold in ERROR_THRESHOLDS_BPM:
-        column = f"error_gt_{int(threshold)}bpm"
+        column = f"unreliable_{int(threshold)}bpm"
         actual = candidates[column].astype("boolean")
         if not actual.loc[~expected_primary].isna().all():
             raise ValueError(f"{column} must be missing outside the primary analysis")

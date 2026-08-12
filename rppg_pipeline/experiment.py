@@ -6,7 +6,6 @@ import argparse
 import json
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from pathlib import Path
 
 import pandas as pd
@@ -14,6 +13,13 @@ import pandas as pd
 from rppg_pipeline.candidates import build_candidate_table
 from rppg_pipeline.ppg_reference import PPGReferenceConfig, build_subject_reference
 from rppg_pipeline.provenance import build_run_manifest
+from rppg_pipeline.reliability_features import (
+    MODEL_INPUTS,
+    TARGET_COLUMNS,
+    build_feature_audit,
+    build_feature_dictionary,
+    build_reliability_features,
+)
 from rppg_pipeline.rgb_trace import process_video_rgb_trace
 from rppg_pipeline.standard_rppg import (
     StandardRPPGConfig,
@@ -98,7 +104,6 @@ def run_experiment(config: ExperimentConfig) -> int:
         raise FileNotFoundError(f"face model not found: {config.face_model}")
 
     config.output.mkdir(parents=True)
-    started_at = datetime.now(UTC)
     completed_stages: list[str] = []
     current_stage = "provenance"
     base_record: dict[str, object] = {
@@ -156,11 +161,22 @@ def run_experiment(config: ExperimentConfig) -> int:
         reference_windows = pd.concat(reference_frames, ignore_index=True)
         rppg_windows = pd.concat(result_frames, ignore_index=True)
         candidates = build_candidate_table(reference_windows, rppg_windows)
+        completed_stages.append(current_stage)
+        current_stage = "features"
+        features = build_reliability_features(candidates)
+        feature_dictionary = build_feature_dictionary(features)
+        feature_audit = build_feature_audit(features)
         reference_windows.to_csv(
             config.output / "reference_windows.csv",
             index=False,
         )
         candidates.to_csv(config.output / "candidate_windows.csv", index=False)
+        features.to_csv(config.output / "reliability_features.csv", index=False)
+        feature_dictionary.to_csv(
+            config.output / "feature_dictionary.csv",
+            index=False,
+        )
+        feature_audit.to_csv(config.output / "feature_audit.csv", index=False)
         completed_stages.append(current_stage)
     except Exception as error:
         _write_run_record(
@@ -168,7 +184,6 @@ def run_experiment(config: ExperimentConfig) -> int:
             config,
             subjects,
             status="failed",
-            started_at=started_at,
             completed_stages=completed_stages,
             failed_stage=current_stage,
             error=error,
@@ -180,11 +195,11 @@ def run_experiment(config: ExperimentConfig) -> int:
         config,
         subjects,
         status="success",
-        started_at=started_at,
         completed_stages=completed_stages,
         result_summary={
             "reference_window_count": len(reference_windows),
             "candidate_row_count": len(candidates),
+            "feature_row_count": len(features),
         },
     )
     return 0
@@ -203,6 +218,12 @@ def _build_base_record(
         {
             "reference": PPGReferenceConfig().to_dict(),
             "rppg": StandardRPPGConfig().to_dict(),
+            "reliability": {
+                "targets": list(TARGET_COLUMNS),
+                "model_inputs": {
+                    model: list(columns) for model, columns in MODEL_INPUTS.items()
+                },
+            },
         },
         repository_root=REPOSITORY_ROOT,
         input_root=config.dataset_root,
@@ -215,7 +236,6 @@ def _write_run_record(
     subjects: Sequence[SubjectDataset],
     *,
     status: str,
-    started_at: datetime,
     completed_stages: Sequence[str],
     failed_stage: str | None = None,
     error: Exception | None = None,
@@ -225,8 +245,6 @@ def _write_run_record(
     record.update(
         {
             "status": status,
-            "started_at_utc": started_at.isoformat(),
-            "finished_at_utc": datetime.now(UTC).isoformat(),
             "selected_subjects": [subject.name for subject in subjects],
             "completed_stages": list(completed_stages),
             "command": _reproduction_command(config),

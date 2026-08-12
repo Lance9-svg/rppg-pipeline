@@ -63,7 +63,7 @@ For a fast pipeline check before the full run, select two original subject IDs:
   --dataset-root "data\UBFC_DATASET_2" `
   --face-model "models\face_landmarker.task" `
   --output "local_outputs\ubfc-smoke" `
-  --subjects 1 2
+  --subjects 1 3
 ```
 
 The fixed experiment writes:
@@ -74,14 +74,19 @@ The fixed experiment writes:
   traces/<subject>/
   reference_windows.csv
   candidate_windows.csv
+  reliability_features.csv
+  feature_dictionary.csv
+  feature_audit.csv
   run.json
 ```
 
 `inventory.csv` uses relative dataset names. `run.json` records input hashes,
-the Git revision, fixed processing parameters, completed stages, timestamps,
-and success or failure. `candidate_windows.csv` has one row for every subject,
-window, facial region, and method combination. Generated files must not be
-committed.
+the Git revision, fixed processing parameters, completed stages, and success or
+failure; it deliberately contains no wall-clock timestamps.
+`candidate_windows.csv` has one row for every subject, window, facial region,
+and method combination. `reliability_features.csv` keeps only eligible rows,
+the frozen M1--M4 input fields, grouping keys, and the strict `>3`, `>5`, and
+`>10 bpm` reliability targets. Generated files must not be committed.
 
 ## Fixed processing path
 
@@ -92,10 +97,12 @@ report generator. It always executes the same sequence:
 2. extract per-frame RGB and source-quality traces for five fixed facial ROIs;
 3. construct 10-second contact-PPG reference windows at a 1-second step;
 4. estimate window-level heart rate with POS and CHROM;
-5. validate and export the candidate table.
+5. validate and export the candidate table;
+6. export the leakage-controlled reliability feature table and field audit.
 
 The numerical implementations and their regression tests live in
-`ppg_reference.py`, `standard_rppg.py`, `roi.py`, and `candidates.py`.
+`ppg_reference.py`, `standard_rppg.py`, `roi.py`, `candidates.py`, and
+`reliability_features.py`.
 
 ## Verification
 
@@ -107,8 +114,9 @@ The numerical implementations and their regression tests live in
 
 The test suite covers the single CLI contract, input inventory, success and
 failure recording, synthetic contact-PPG recovery, synthetic POS/CHROM
-recovery, ROI behaviour, candidate-key completeness, and provenance hashes.
-It does not claim that the formal UBFC experiment has run.
+recovery, ROI behaviour, candidate-key completeness, strict label boundaries,
+feature allowlists, leakage rejection, and provenance hashes. It does not claim
+that the formal UBFC experiment has run.
 
 ## Method references
 
@@ -137,8 +145,8 @@ all thresholds and window settings are explicit in `PPGReferenceConfig`.
 This branch currently supports only the canonical UBFC-rPPG Dataset 2 layout
 and classical POS/CHROM processing. It is not a general rPPG framework. It does
 not include trained reliability models, cross-dataset validation, formal
-experimental results, or thesis figures. Those claims require later commits
-and actual local experiment runs.
+42-subject results, or thesis figures. Those claims require later commits and
+actual local experiment runs.
 
 ## License
 

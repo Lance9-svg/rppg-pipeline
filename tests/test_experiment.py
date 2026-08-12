@@ -164,6 +164,7 @@ def test_run_experiment_executes_the_fixed_stages_once(
     )
 
     candidates = pd.read_csv(output / "candidate_windows.csv")
+    features = pd.read_csv(output / "reliability_features.csv")
     run_record = json.loads((output / "run.json").read_text(encoding="utf-8"))
     assert status == 0
     assert stages == [
@@ -178,12 +179,18 @@ def test_run_experiment_executes_the_fixed_stages_once(
         ["subject", "window_id", "roi", "method"]
     ).any()
     assert run_record["status"] == "success"
+    assert {
+        "created_at_utc",
+        "started_at_utc",
+        "finished_at_utc",
+    }.isdisjoint(run_record)
     assert run_record["selected_subjects"] == ["subject1"]
     assert run_record["summary"] == {
         "selected_subject_count": 1,
         "completed_subject_count": 1,
         "reference_window_count": 1,
         "candidate_row_count": 10,
+        "feature_row_count": 10,
     }
     assert {item["name"] for item in run_record["inputs"]} == {
         "face_landmarker.task",
@@ -192,6 +199,9 @@ def test_run_experiment_executes_the_fixed_stages_once(
     }
     assert (output / "inventory.csv").is_file()
     assert (output / "reference_windows.csv").is_file()
+    assert len(features) == 10
+    assert (output / "feature_dictionary.csv").is_file()
+    assert (output / "feature_audit.csv").is_file()
 
 
 def test_run_experiment_records_failure_without_retrying(

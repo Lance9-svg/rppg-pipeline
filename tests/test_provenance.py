@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import subprocess
-from datetime import UTC, datetime
 from importlib.metadata import version
 from pathlib import Path
 
@@ -52,8 +51,7 @@ def test_build_run_manifest_records_reproducible_metadata(
         repository_root=repo,
     )
 
-    created_at = datetime.fromisoformat(str(manifest["created_at_utc"]))
-    assert created_at.tzinfo == UTC
+    assert "created_at_utc" not in manifest
     assert manifest["schema_version"] == 1
     assert manifest["stage"] == "phase3"
     assert manifest["git_commit"] == commit

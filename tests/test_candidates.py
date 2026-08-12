@@ -23,11 +23,13 @@ def test_build_candidate_table_preserves_keys_and_builds_primary_targets() -> No
 
     assert len(candidates) == 20
     assert not candidates.duplicated(["subject", "window_id", "roi", "method"]).any()
-    assert candidates["primary_analysis_eligible"].sum() == 9
-    assert candidates["error_gt_3bpm"].dtype == "boolean"
-    assert candidates["error_gt_5bpm"].dtype == "boolean"
-    assert candidates["error_gt_10bpm"].dtype == "boolean"
-    assert candidates.loc[candidates["window_id"].eq(2), "error_gt_5bpm"].isna().all()
+    assert candidates["eligible_model"].sum() == 9
+    assert candidates["unreliable_3bpm"].dtype == "boolean"
+    assert candidates["unreliable_5bpm"].dtype == "boolean"
+    assert candidates["unreliable_10bpm"].dtype == "boolean"
+    assert candidates.loc[
+        candidates["window_id"].eq(2), "unreliable_5bpm"
+    ].isna().all()
     assert "spectral_entropy" in candidates.columns
     assert candidates["spectral_entropy"].notna().all()
     assert list(candidates["method"].head(2)) == ["CHROM", "POS"]
@@ -39,13 +41,13 @@ def test_build_candidate_table_preserves_keys_and_builds_primary_targets() -> No
     over_ten = _candidate(candidates, 1, "right_cheek", "POS")
     failed = _candidate(candidates, 1, "cheeks_mean", "POS")
 
-    assert bool(at_three["error_gt_3bpm"]) is False
-    assert bool(at_five["error_gt_5bpm"]) is False
-    assert bool(over_five["error_gt_5bpm"]) is True
-    assert bool(at_ten["error_gt_10bpm"]) is False
-    assert bool(over_ten["error_gt_10bpm"]) is True
-    assert bool(failed["primary_analysis_eligible"]) is False
-    assert pd.isna(failed["error_gt_5bpm"])
+    assert bool(at_three["unreliable_3bpm"]) is False
+    assert bool(at_five["unreliable_5bpm"]) is False
+    assert bool(over_five["unreliable_5bpm"]) is True
+    assert bool(at_ten["unreliable_10bpm"]) is False
+    assert bool(over_ten["unreliable_10bpm"]) is True
+    assert bool(failed["eligible_model"]) is False
+    assert pd.isna(failed["unreliable_5bpm"])
 
 
 def test_build_candidate_table_rejects_duplicate_candidate_key() -> None:

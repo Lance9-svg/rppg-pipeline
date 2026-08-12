@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import platform
 import subprocess
-from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
@@ -60,7 +59,6 @@ def build_run_manifest(
     return {
         "schema_version": 1,
         "stage": stage,
-        "created_at_utc": datetime.now(UTC).isoformat(),
         "git_commit": _git_output(repository_root, "rev-parse", "HEAD"),
         "git_dirty": bool(_git_output(repository_root, "status", "--porcelain")),
         "python_version": platform.python_version(),
