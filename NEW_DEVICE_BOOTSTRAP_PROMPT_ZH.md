@@ -1,9 +1,14 @@
 # 新设备一轮对话完整恢复提示词
 
-将下方代码块完整复制到新设备的 Codex。执行前应先在新设备登录 GitHub，并确保
-账号能够读取三个私有/正式仓库。
+本文件已随项目上传。新设备克隆迁移仓库后，可直接要求 Codex：
 
-```text
+> 完整阅读并执行 `NEW_DEVICE_BOOTSTRAP_PROMPT_ZH.md`，持续工作到安全完成或遇到
+> 必须由我处理的真实阻塞。
+
+执行前应先登录 GitHub，并确保账号能够读取两个私有迁移仓库和正式项目仓库。
+
+## 可直接交给 Codex 的迁移指令
+
 我要在这台新设备上完整恢复并继续开发 rPPG 项目。请在本轮对话中持续执行到
 安全完成或遇到必须由我处理的真实阻塞；不要只给命令而不执行。
 
@@ -13,7 +18,7 @@
 - 后续正式开发：https://github.com/Lance9-svg/rppg-pipeline.git
 - 项目自定义 Skills：https://github.com/Lance9-svg/codex-research-skills.git
 - 目标分支：codex/research/ubfc-reliability-experiment
-- 迁移基线提交至少应包含：0e9f422 和 46576ee
+- 迁移基线提交至少应包含：0cc364f、0e9f422 和 46576ee
 
 全局安全规则：
 
@@ -84,9 +89,37 @@ git clone https://github.com/Lance9-svg/codex-research-skills.git
 - 不包含嵌套 `.git`、`.env`、凭据、虚拟环境和缓存；
 - 每个 Skill 引用的本地 scripts、references、assets、templates 都存在。
 
-将 `codex-research-skills/skills` 下每个完整目录复制到当前 rPPG 项目的
-`.codex/skills`。不要只复制 `SKILL.md`，不要覆盖已有同名目录。若已有同名 Skill，
-先逐文件比较；一致则保留，存在差异则报告并等待，不要猜测合并。
+优先使用 Codex 内置 `skill-installer`，将 `codex-research-skills/skills` 下每个
+完整目录安装到当前用户的 `$CODEX_HOME/skills`（通常为 `~/.codex/skills`）。
+不要安装到 rPPG Git 工作树内，避免工具文件被误提交。不要只复制 `SKILL.md`，
+不要覆盖已有同名目录。若已有同名 Skill，先逐文件比较；一致则保留，存在差异则
+报告并等待，不要猜测合并。
+
+需要安装的仓库路径为：
+
+- `skills/academic-research-suite`
+- `skills/humanizer`
+- `skills/scientific-thinking-literature-review`
+- `skills/nature-academic-search`
+- `skills/nature-citation`
+- `skills/nature-data`
+- `skills/nature-downloader`
+- `skills/nature-experiment-log`
+- `skills/nature-figure`
+- `skills/nature-literature-pipeline`
+- `skills/nature-paper2ppt`
+- `skills/nature-paper-card`
+- `skills/nature-paper-to-patent`
+- `skills/nature-polishing`
+- `skills/nature-reader`
+- `skills/nature-ref-verifier`
+- `skills/nature-response`
+- `skills/nature-reviewer`
+- `skills/nature-shared`
+- `skills/nature-statistics`
+- `skills/nature-writing`
+- `skills/paper-spine`
+- `skills/nature-proposal-writer`
 
 目标应包括：academic-research-suite、humanizer、literature-review、
 nature-academic-search、nature-citation、nature-data、nature-downloader、
@@ -100,8 +133,8 @@ nature-statistics、nature-writing、paper-spine、researchwrite。
 - `literature-review` 位于 `scientific-thinking-literature-review/`
 - `researchwrite` 位于 `nature-proposal-writer/`
 
-安装后重新扫描项目 `.codex/skills/**/SKILL.md`，列出实际恢复的 23 项。说明这些
-Skills 是否需要新一轮对话或重启 Codex 才会加载。
+安装后重新扫描用户级 Codex Skills 目录下的 `SKILL.md`，列出实际恢复的 23 项。
+说明这些 Skills 是否需要新一轮对话或重启 Codex 才会加载。
 
 四、恢复系统与插件 Skills
 
@@ -169,7 +202,7 @@ git push origin codex/research/ubfc-reliability-experiment
 八、最终核验与报告
 
 实际核验三个仓库 URL、当前 commit、remote refs、工作树、pytest、Ruff、CLI、
-23 个项目 Skills、系统/插件 Skills 和手动资产。最后报告：
+23 个用户级项目 Skills、系统/插件 Skills 和手动资产。最后报告：
 
 1. 项目与 Skills checkout 的绝对路径；
 2. 当前 branch/commit 和 origin/migration URL；
@@ -182,5 +215,3 @@ git push origin codex/research/ubfc-reliability-experiment
 9. 剩余风险和下一步唯一建议。
 
 不要声称未实际完成的安装、测试、实验、人工审查或同步已经完成。
-```
-
