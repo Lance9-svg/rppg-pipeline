@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
@@ -13,9 +13,7 @@ import pandas as pd
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 
-from rppg_pipeline.degradation import roi_shift_offsets
-
-FORMAL_ROIS = ("full_face_inner", "forehead", "cheeks_mean")
+from rppg_pipeline.degradation import ROIS, roi_shift_offsets
 
 FACE_OVAL_IDS = [
     10,
@@ -157,20 +155,6 @@ RIGHT_CHEEK_IDS = [
 
 
 @dataclass(frozen=True)
-class VideoMetadata:
-    # Video metadata
-    video_path: str
-    fps: float
-    frame_count: int
-    duration_sec: float
-    width: int
-    height: int
-
-    def to_dict(self) -> dict[str, object]:
-        return asdict(self)
-
-
-@dataclass(frozen=True)
 class ROIMeasurement:
     # ROI color measurement
     rgb: tuple[float, float, float]
@@ -232,64 +216,44 @@ class FaceLandmarker:
         self.close()
 
 
-# Read video metadata
-def read_video_metadata(video_path: str | Path) -> VideoMetadata:
+# Extract multiple ROI shifts
+def extract_rgb_traces(
+    video_path: str | Path,
+    detector: LandmarkDetector,
+    roi_shift_fractions: tuple[float, ...],
+    max_frames: int | None = None,
+) -> dict[float, pd.DataFrame]:
     path = Path(video_path)
     if not path.is_file():
         raise FileNotFoundError(f"Video file not found: {path}")
     capture = cv2.VideoCapture(str(path))
+    rows: dict[float, list[dict[str, object]]] = {
+        fraction: [] for fraction in roi_shift_fractions
+    }
+    previous_center: np.ndarray | None = None
+    previous_area: float | None = None
     try:
         if not capture.isOpened():
             raise ValueError(f"Could not open video: {path}")
         fps = float(capture.get(cv2.CAP_PROP_FPS))
-        frame_count = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
-        width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        return VideoMetadata(
-            video_path=str(path.resolve()),
-            fps=fps,
-            frame_count=frame_count,
-            duration_sec=frame_count / fps,
-            width=width,
-            height=height,
-        )
-    finally:
-        capture.release()
-
-
-# Extract frame-level RGB traces
-def extract_rgb_trace(
-    video_path: str | Path,
-    detector: LandmarkDetector,
-    max_frames: int | None = None,
-    roi_shift_fraction: float = 0.0,
-) -> pd.DataFrame:
-    metadata = read_video_metadata(video_path)
-    capture = cv2.VideoCapture(str(video_path))
-    rows: list[dict[str, object]] = []
-    previous_center: np.ndarray | None = None
-    previous_area: float | None = None
-    try:
         frame_index = 0
         while max_frames is None or frame_index < max_frames:
             ok, frame_bgr = capture.read()
             if not ok:
                 break
             frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
-            timestamp_ms = int(frame_index * 1000.0 / metadata.fps)
-            time_sec = frame_index / metadata.fps
+            timestamp_ms = int(frame_index * 1000.0 / fps)
+            time_sec = frame_index / fps
             normalized = detector.detect(frame_rgb, timestamp_ms)
-            row: dict[str, object] = {
+            base: dict[str, object] = {
                 "frame_idx": frame_index,
                 "time_sec": time_sec,
                 "landmark_valid": normalized is not None,
-                "roi_shift_fraction": roi_shift_fraction,
             }
             if normalized is None:
-                row.update(_empty_face_values())
-                row.update({"roi_shift_x_px": np.nan, "roi_shift_y_px": np.nan})
-                measurements = _empty_measurements()
-                retention = {roi: np.nan for roi in FORMAL_ROIS}
+                base.update(_empty_face_values())
+                masks = None
+                face_width = np.nan
             else:
                 height, width = frame_rgb.shape[:2]
                 landmarks = landmarks_to_pixels(normalized, width, height)
@@ -310,7 +274,7 @@ def extract_rgb_trace(
                 )
                 previous_center = center
                 previous_area = face_area
-                row.update(
+                base.update(
                     {
                         "face_width_px": face_width,
                         "face_area_ratio": face_area / float(width * height),
@@ -319,39 +283,43 @@ def extract_rgb_trace(
                     }
                 )
                 masks = build_roi_masks(landmarks, (height, width))
-                if roi_shift_fraction:
+
+            for fraction in roi_shift_fractions:
+                row = {**base, "roi_shift_fraction": fraction}
+                if masks is None:
+                    offset_x, offset_y = np.nan, np.nan
+                    measurements = _empty_measurements()
+                    retention = {roi: np.nan for roi in ROIS}
+                elif fraction:
                     offset_x, offset_y = roi_shift_offsets(
                         np.array([time_sec]),
                         np.array([face_width]),
-                        roi_shift_fraction,
+                        fraction,
                     )[0]
                     shifted_masks = shift_roi_masks(masks, offset_x, offset_y)
                     retention = {
                         roi: _roi_retention_ratio(masks[roi], shifted_masks[roi])
-                        for roi in FORMAL_ROIS
+                        for roi in ROIS
                     }
-                    masks = shifted_masks
+                    measurements = measure_rois(frame_rgb, shifted_masks)
                 else:
                     offset_x, offset_y = 0.0, 0.0
-                    retention = {roi: 1.0 for roi in FORMAL_ROIS}
+                    retention = {roi: 1.0 for roi in ROIS}
+                    measurements = measure_rois(frame_rgb, masks)
                 row.update(
                     {
                         "roi_shift_x_px": float(offset_x),
                         "roi_shift_y_px": float(offset_y),
                     }
                 )
-                measurements = measure_rois(
-                    frame_rgb,
-                    masks,
-                )
-            for roi, measurement in measurements.items():
-                row.update(_measurement_columns(roi, measurement))
-                row[f"{roi}_retention_ratio"] = retention[roi]
-            rows.append(row)
+                for roi, measurement in measurements.items():
+                    row.update(_measurement_columns(roi, measurement))
+                    row[f"{roi}_retention_ratio"] = retention[roi]
+                rows[fraction].append(row)
             frame_index += 1
     finally:
         capture.release()
-    return pd.DataFrame(rows)
+    return {fraction: pd.DataFrame(values) for fraction, values in rows.items()}
 
 
 # Convert landmarks to pixels
@@ -441,7 +409,7 @@ def measure_rois(
     masks: dict[str, np.ndarray],
 ) -> dict[str, ROIMeasurement]:
     measurements = {}
-    for roi in FORMAL_ROIS:
+    for roi in ROIS:
         mask = masks[roi]
         pixels = frame_rgb[mask > 0].astype(float)
         if len(pixels) < 50:
@@ -455,11 +423,7 @@ def measure_rois(
             continue
         rgb = tuple(float(value) for value in np.mean(pixels, axis=0))
         brightness = float(
-            np.mean(
-                0.299 * pixels[:, 0]
-                + 0.587 * pixels[:, 1]
-                + 0.114 * pixels[:, 2]
-            )
+            np.mean(0.299 * pixels[:, 0] + 0.587 * pixels[:, 1] + 0.114 * pixels[:, 2])
         )
         measurements[roi] = ROIMeasurement(
             rgb=rgb,
@@ -491,7 +455,7 @@ def _empty_measurements() -> dict[str, ROIMeasurement]:
             overexposure_ratio=np.nan,
             valid=False,
         )
-        for roi in FORMAL_ROIS
+        for roi in ROIS
     }
 
 

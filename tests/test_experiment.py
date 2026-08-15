@@ -33,8 +33,8 @@ def test_run_original_baseline_writes_complete_tables(
     monkeypatch.setattr(experiment, "FaceLandmarker", _FakeLandmarker)
     monkeypatch.setattr(
         experiment,
-        "extract_rgb_trace",
-        lambda video_path, detector: trace,
+        "extract_rgb_traces",
+        lambda video_path, detector, fractions: {0.0: trace},
     )
     output = tmp_path / "baseline"
 
@@ -53,11 +53,12 @@ def test_run_original_baseline_writes_complete_tables(
     assert (output / "traces" / "subject1.csv").is_file()
 
 
-def test_run_degradation_experiment_writes_five_condition_tables(
+def test_run_degradation_experiment_builds_five_condition_tables(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
     from rppg_pipeline import experiment
+    from rppg_pipeline.dataset import SubjectFiles
 
     dataset_root = tmp_path / "dataset"
     subject_dir = dataset_root / "subject1"
@@ -85,36 +86,41 @@ def test_run_degradation_experiment_writes_five_condition_tables(
         original_trace,
     )
 
-    def fake_extract(video_path, detector, roi_shift_fraction=0.0):
-        return _trace_frame(
-            time_sec,
-            _synthetic_rgb(time_sec, expected_bpm / 60.0),
-            roi_shift_fraction,
-        )
+    references = pd.read_csv(baseline_output / "reference_windows.csv")
+    calls = []
+
+    def fake_extract(video_path, detector, roi_shift_fractions):
+        calls.append(tuple(roi_shift_fractions))
+        return {
+            fraction: _trace_frame(
+                time_sec,
+                _synthetic_rgb(time_sec, expected_bpm / 60.0),
+                fraction,
+            )
+            for fraction in roi_shift_fractions
+        }
 
     monkeypatch.setattr(experiment, "FaceLandmarker", _FakeLandmarker)
-    monkeypatch.setattr(experiment, "extract_rgb_trace", fake_extract)
-    output = tmp_path / "degradation"
+    monkeypatch.setattr(experiment, "extract_rgb_traces", fake_extract)
 
-    result = experiment.run_degradation_experiment(
-        dataset_root,
+    tables = experiment.run_degradation_experiment(
+        [
+            SubjectFiles(
+                "subject1", subject_dir / "vid.avi", subject_dir / "ground_truth.txt"
+            )
+        ],
         model_path,
         baseline_output,
-        output,
-        subject_names=("subject1",),
+        references,
     )
 
-    assert result == {
-        "subject_count": 1,
-        "reference_window_count": 1,
-        "candidate_count": 30,
-    }
-    candidates = pd.read_csv(output / "degradation_candidates.csv")
-    metrics = pd.read_csv(output / "degradation_metrics.csv")
-    audit = pd.read_csv(output / "condition_audit.csv")
+    assert calls == [(0.03, 0.05)]
+    assert set(tables) == {"candidates", "audit"}
+    candidates = tables["candidates"]
+    audit = tables["audit"]
     assert len(candidates) == 30
-    assert len(metrics) == 30
     assert len(audit) == 15
+    assert "effective_fps" not in candidates
     assert candidates["condition"].drop_duplicates().tolist() == [
         "original",
         "fps15",
@@ -133,48 +139,6 @@ def test_run_degradation_experiment_writes_five_condition_tables(
     assert np.allclose(shifted["roi_shift_fraction"], 0.05)
     assert np.allclose(shifted["max_roi_shift_fraction"], 0.05, atol=1e-12)
     assert np.allclose(shifted["mean_roi_retention_ratio"], 0.95)
-    for condition in ("original", "fps15", "fps10", "roi_shift_3", "roi_shift_5"):
-        assert (output / "traces" / condition / "subject1.csv").is_file()
-
-
-def test_degradation_experiment_rejects_changed_baseline_reference(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    from rppg_pipeline import experiment
-
-    dataset_root = tmp_path / "dataset"
-    subject_dir = dataset_root / "subject1"
-    subject_dir.mkdir(parents=True)
-    (subject_dir / "vid.avi").touch()
-    time_sec = np.arange(0.0, 10.0, 1.0 / 30.0)
-    ppg = np.sin(2.0 * np.pi * 1.2 * time_sec)
-    ground_truth_path = subject_dir / "ground_truth.txt"
-    _write_ground_truth(
-        ground_truth_path,
-        ppg,
-        np.full(len(time_sec), 72.0),
-        time_sec,
-    )
-    trace = _trace_frame(time_sec, _synthetic_rgb(time_sec, 1.2))
-    baseline_output = _write_baseline_output(tmp_path, ground_truth_path, trace)
-    references = pd.read_csv(baseline_output / "reference_windows.csv")
-    references["reference_hr_bpm"] += 1.0
-    references.to_csv(baseline_output / "reference_windows.csv", index=False)
-    monkeypatch.setattr(
-        experiment,
-        "build_condition_traces",
-        lambda *args: pytest.fail("condition traces built before reference check"),
-    )
-
-    with pytest.raises(ValueError, match="baseline reference"):
-        experiment.run_degradation_experiment(
-            dataset_root,
-            tmp_path / "face_landmarker.task",
-            baseline_output,
-            tmp_path / "degradation",
-            subject_names=("subject1",),
-        )
 
 
 def test_condition_audit_ignores_missing_landmark_measurements() -> None:

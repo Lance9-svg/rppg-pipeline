@@ -19,8 +19,8 @@ def test_estimate_hr_recovers_synthetic_rate(method: str) -> None:
     assert estimate == pytest.approx(expected_bpm, abs=0.5)
 
 
-def test_build_original_candidates_returns_six_rows_per_window() -> None:
-    from rppg_pipeline.rppg import build_original_candidates
+def test_build_candidates_returns_six_original_rows_per_window() -> None:
+    from rppg_pipeline.rppg import build_candidates
 
     sample_rate_hz = 30.0
     expected_bpm = 72.0
@@ -41,7 +41,7 @@ def test_build_original_candidates_returns_six_rows_per_window() -> None:
         ]
     )
 
-    candidates = build_original_candidates("subject1", references, trace)
+    candidates = build_candidates("subject1", references, trace, "original")
 
     assert len(candidates) == 6
     assert candidates["condition"].eq("original").all()
@@ -59,7 +59,7 @@ def test_build_original_candidates_returns_six_rows_per_window() -> None:
 
 
 def test_candidate_rejects_long_missing_rgb_gap() -> None:
-    from rppg_pipeline.rppg import build_original_candidates
+    from rppg_pipeline.rppg import build_candidates
 
     sample_rate_hz = 30.0
     time_sec = np.arange(0.0, 10.0, 1.0 / sample_rate_hz)
@@ -81,7 +81,7 @@ def test_candidate_rejects_long_missing_rgb_gap() -> None:
         ]
     )
 
-    candidates = build_original_candidates("subject1", references, trace)
+    candidates = build_candidates("subject1", references, trace, "original")
     forehead = candidates[candidates["roi"].eq("forehead")]
 
     assert forehead["window_status"].eq("long_missing_gap").all()

@@ -52,7 +52,7 @@ def test_landmarks_to_pixels_uses_frame_bounds() -> None:
 def test_extract_rgb_trace_reads_frames_and_marks_missing_face(
     tmp_path: Path,
 ) -> None:
-    from rppg_pipeline.video import extract_rgb_trace
+    from rppg_pipeline.video import extract_rgb_traces
 
     video_path = tmp_path / "sample.avi"
     writer = cv2.VideoWriter(
@@ -67,7 +67,7 @@ def test_extract_rgb_trace_reads_frames_and_marks_missing_face(
     normalized = _synthetic_landmarks() / 99.0
     detector = _SequenceDetector([normalized, None, normalized])
 
-    trace = extract_rgb_trace(video_path, detector)
+    trace = extract_rgb_traces(video_path, detector, (0.0,))[0.0]
 
     assert len(trace) == 3
     np.testing.assert_allclose(trace["time_sec"], [0.0, 0.1, 0.2])
@@ -78,8 +78,8 @@ def test_extract_rgb_trace_reads_frames_and_marks_missing_face(
     assert trace.loc[0, "forehead_r_mean"] == pytest.approx(40.0, abs=3.0)
 
 
-def test_extract_rgb_trace_records_roi_shift(tmp_path: Path) -> None:
-    from rppg_pipeline.video import extract_rgb_trace
+def test_extract_rgb_traces_builds_two_shifts_in_one_pass(tmp_path: Path) -> None:
+    from rppg_pipeline.video import extract_rgb_traces
 
     video_path = tmp_path / "gradient.avi"
     writer = cv2.VideoWriter(
@@ -95,18 +95,18 @@ def test_extract_rgb_trace_records_roi_shift(tmp_path: Path) -> None:
     writer.release()
     normalized = _synthetic_landmarks() / 99.0
 
-    original = extract_rgb_trace(
+    traces = extract_rgb_traces(
         video_path,
         _SequenceDetector([normalized] * 6),
+        (0.0, 0.03, 0.05),
     )
-    shifted = extract_rgb_trace(
-        video_path,
-        _SequenceDetector([normalized] * 6),
-        roi_shift_fraction=0.05,
-    )
+    original = traces[0.0]
+    shifted = traces[0.05]
 
+    assert tuple(traces) == (0.0, 0.03, 0.05)
     assert original["roi_shift_x_px"].eq(0.0).all()
     assert shifted["roi_shift_fraction"].eq(0.05).all()
+    assert traces[0.05].loc[5, "roi_shift_x_px"] > traces[0.03].loc[5, "roi_shift_x_px"]
     assert shifted.loc[5, "roi_shift_x_px"] == pytest.approx(
         0.05 * shifted.loc[5, "face_width_px"]
     )
@@ -114,9 +114,41 @@ def test_extract_rgb_trace_records_roi_shift(tmp_path: Path) -> None:
     for roi in ("full_face_inner", "forehead", "cheeks_mean"):
         retention = shifted.loc[5, f"{roi}_retention_ratio"]
         assert 0.0 < retention < 1.0
-    assert shifted.loc[5, "full_face_inner_r_mean"] > original.loc[
-        5, "full_face_inner_r_mean"
-    ]
+    assert (
+        shifted.loc[5, "full_face_inner_r_mean"]
+        > original.loc[5, "full_face_inner_r_mean"]
+    )
+
+
+def test_extract_rgb_traces_opens_video_once(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from rppg_pipeline import video
+
+    video_path = tmp_path / "sample.avi"
+    writer = cv2.VideoWriter(
+        str(video_path),
+        cv2.VideoWriter_fourcc(*"MJPG"),
+        10.0,
+        (100, 100),
+    )
+    writer.write(np.zeros((100, 100, 3), dtype=np.uint8))
+    writer.release()
+
+    real_capture = cv2.VideoCapture
+    opened_paths: list[str] = []
+
+    def open_capture(path: str) -> cv2.VideoCapture:
+        opened_paths.append(path)
+        return real_capture(path)
+
+    monkeypatch.setattr(video.cv2, "VideoCapture", open_capture)
+    normalized = _synthetic_landmarks() / 99.0
+
+    video.extract_rgb_traces(video_path, _SequenceDetector([normalized]), (0.0,))
+
+    assert opened_paths == [str(video_path)]
 
 
 def test_face_landmarker_uses_cpu_delegate(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -169,12 +201,8 @@ def _place_polygon(
     y_max: float,
 ) -> None:
     angles = np.linspace(0.0, 2.0 * np.pi, len(indices), endpoint=False)
-    landmarks[indices, 0] = (x_min + x_max) / 2 + (x_max - x_min) / 2 * np.cos(
-        angles
-    )
-    landmarks[indices, 1] = (y_min + y_max) / 2 + (y_max - y_min) / 2 * np.sin(
-        angles
-    )
+    landmarks[indices, 0] = (x_min + x_max) / 2 + (x_max - x_min) / 2 * np.cos(angles)
+    landmarks[indices, 1] = (y_min + y_max) / 2 + (y_max - y_min) / 2 * np.sin(angles)
 
 
 class _SequenceDetector:

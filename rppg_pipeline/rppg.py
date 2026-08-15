@@ -6,9 +6,8 @@ import numpy as np
 import pandas as pd
 from scipy import signal
 
-from rppg_pipeline.degradation import effective_sample_rate
+from rppg_pipeline.degradation import ROIS, effective_sample_rate
 
-ROIS = ("full_face_inner", "forehead", "cheeks_mean")
 METHODS = ("POS", "CHROM")
 
 
@@ -20,15 +19,6 @@ def estimate_hr(
 ) -> float:
     bvp = _extract_bvp(rgb, sample_rate_hz, method)
     return float(_spectral_features(bvp, sample_rate_hz)["rppg_hr_bpm"])
-
-
-# Build original candidate rows
-def build_original_candidates(
-    subject: str,
-    references: pd.DataFrame,
-    trace: pd.DataFrame,
-) -> pd.DataFrame:
-    return build_candidates(subject, references, trace, "original")
 
 
 # Build candidate rows for one condition
@@ -97,15 +87,13 @@ def _prepare_window(
     sample_rate_hz: float,
 ) -> tuple[str, np.ndarray, dict[str, float]]:
     times = trace["time_sec"].to_numpy(dtype=float)
-    rgb = trace[
-        [f"{roi}_r_mean", f"{roi}_g_mean", f"{roi}_b_mean"]
-    ].to_numpy(dtype=float)
+    rgb = trace[[f"{roi}_r_mean", f"{roi}_g_mean", f"{roi}_b_mean"]].to_numpy(
+        dtype=float
+    )
     valid = trace[f"{roi}_valid"].to_numpy(dtype=bool) & np.isfinite(rgb).all(axis=1)
     duration_sec = end_time_sec - start_time_sec
     expected_frames = (
-        int(round(duration_sec * sample_rate_hz))
-        if np.isfinite(sample_rate_hz)
-        else 0
+        int(round(duration_sec * sample_rate_hz)) if np.isfinite(sample_rate_hz) else 0
     )
     coverage = min(1.0, len(trace) / expected_frames) if expected_frames else 0.0
     valid_fraction = float(np.mean(valid)) if len(valid) else 0.0
@@ -261,9 +249,9 @@ def _refine_peak(
     )
     delta = 0.0
     if abs(denominator) > 1e-12:
-        delta = 0.5 * (
-            log_power[peak_index - 1] - log_power[peak_index + 1]
-        ) / denominator
+        delta = (
+            0.5 * (log_power[peak_index - 1] - log_power[peak_index + 1]) / denominator
+        )
         delta = float(np.clip(delta, -1.0, 1.0))
     return float(frequencies[peak_index] + delta * (frequencies[1] - frequencies[0]))
 

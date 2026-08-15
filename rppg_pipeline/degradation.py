@@ -5,13 +5,15 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-FORMAL_CONDITIONS = (
-    "original",
-    "fps15",
-    "fps10",
-    "roi_shift_3",
-    "roi_shift_5",
-)
+ROIS = ("full_face_inner", "forehead", "cheeks_mean")
+CONDITION_SETTINGS = {
+    "original": ("none", np.nan, np.nan),
+    "fps15": ("frame_rate", 15.0, 15.0),
+    "fps10": ("frame_rate", 10.0, 10.0),
+    "roi_shift_3": ("roi_shift", 0.03, np.nan),
+    "roi_shift_5": ("roi_shift", 0.05, np.nan),
+}
+FORMAL_CONDITIONS = tuple(CONDITION_SETTINGS)
 
 
 # Select nearest source frames
@@ -70,8 +72,7 @@ def downsample_window(
     target_fps: float,
 ) -> pd.DataFrame:
     window = trace[
-        (trace["time_sec"] >= start_time_sec)
-        & (trace["time_sec"] < end_time_sec)
+        (trace["time_sec"] >= start_time_sec) & (trace["time_sec"] < end_time_sec)
     ]
     selected = select_frame_indices(
         window["time_sec"].to_numpy(dtype=float),
