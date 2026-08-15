@@ -38,13 +38,15 @@ def build_candidates(
     trace: pd.DataFrame,
     condition: str,
 ) -> pd.DataFrame:
-    sample_rate_hz = effective_sample_rate(trace["time_sec"].to_numpy(dtype=float))
     rows: list[dict[str, object]] = []
     for reference in references.itertuples(index=False):
         selected = trace[
             (trace["time_sec"] >= float(reference.start_time_sec))
             & (trace["time_sec"] < float(reference.end_time_sec))
         ]
+        sample_rate_hz = effective_sample_rate(
+            selected["time_sec"].to_numpy(dtype=float)
+        )
         for roi in ROIS:
             status, rgb, quality = _prepare_window(
                 selected,
@@ -100,8 +102,12 @@ def _prepare_window(
     ].to_numpy(dtype=float)
     valid = trace[f"{roi}_valid"].to_numpy(dtype=bool) & np.isfinite(rgb).all(axis=1)
     duration_sec = end_time_sec - start_time_sec
-    expected_frames = int(round(duration_sec * sample_rate_hz))
-    coverage = min(1.0, len(trace) / expected_frames)
+    expected_frames = (
+        int(round(duration_sec * sample_rate_hz))
+        if np.isfinite(sample_rate_hz)
+        else 0
+    )
+    coverage = min(1.0, len(trace) / expected_frames) if expected_frames else 0.0
     valid_fraction = float(np.mean(valid)) if len(valid) else 0.0
     valid_times = times[valid]
     gap_points = np.concatenate(([start_time_sec], valid_times, [end_time_sec]))
@@ -264,11 +270,10 @@ def _refine_peak(
 
 # Add POS CHROM agreement
 def _add_method_agreement(candidates: pd.DataFrame) -> pd.DataFrame:
-    pivot = candidates.pivot_table(
+    pivot = candidates.pivot(
         index=["subject", "condition", "window_id", "roi"],
         columns="method",
         values="rppg_hr_bpm",
-        aggfunc="first",
     )
     difference = (pivot["POS"] - pivot["CHROM"]).abs()
     return candidates.merge(

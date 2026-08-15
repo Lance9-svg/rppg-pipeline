@@ -65,6 +65,47 @@ def test_downsample_window_preserves_source_rows(
     assert effective_fps == pytest.approx(target_fps, abs=0.4)
 
 
+def test_downsample_trace_resets_each_reference_window() -> None:
+    from rppg_pipeline.degradation import downsample_trace
+
+    time_sec = np.arange(0.0, 20.0, 1.0 / 30.0)
+    trace = pd.DataFrame(
+        {
+            "frame_idx": np.arange(len(time_sec)),
+            "time_sec": time_sec,
+        }
+    )
+    references = pd.DataFrame(
+        [
+            {"start_time_sec": 0.0, "end_time_sec": 10.0},
+            {"start_time_sec": 10.0, "end_time_sec": 20.0},
+        ]
+    )
+
+    sampled = downsample_trace(trace, references, 15.0)
+
+    assert len(sampled) == 300
+    assert (sampled["time_sec"] < 10.0).sum() == 150
+    assert (sampled["time_sec"] >= 10.0).sum() == 150
+    assert sampled["frame_idx"].is_unique
+
+
+def test_downsample_window_keeps_short_source_as_failure_evidence() -> None:
+    from rppg_pipeline.degradation import downsample_window
+
+    trace = pd.DataFrame(
+        {
+            "frame_idx": np.arange(5),
+            "time_sec": np.arange(5) / 10.0,
+        }
+    )
+
+    sampled = downsample_window(trace, 0.0, 1.0, 10.0)
+
+    assert len(sampled) == 5
+    np.testing.assert_array_equal(sampled["frame_idx"], np.arange(5))
+
+
 def test_roi_shift_offsets_are_deterministic_smooth_and_bounded() -> None:
     from rppg_pipeline.degradation import roi_shift_offsets
 

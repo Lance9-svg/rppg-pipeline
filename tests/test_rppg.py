@@ -88,6 +88,48 @@ def test_candidate_rejects_long_missing_rgb_gap() -> None:
     assert forehead["rppg_hr_bpm"].isna().all()
 
 
+def test_candidates_use_each_windows_effective_sample_rate() -> None:
+    from rppg_pipeline.rppg import build_candidates
+
+    first_time = np.arange(0.0, 10.0, 1.0 / 30.0)
+    second_time = np.arange(10.0, 20.0, 1.0 / 15.0)
+    trace = pd.concat(
+        [
+            _trace_frame(first_time, _synthetic_rgb(first_time, 1.2)),
+            _trace_frame(second_time, _synthetic_rgb(second_time, 1.2)),
+        ],
+        ignore_index=True,
+    )
+    references = pd.DataFrame(
+        [
+            _reference_row(1, 0.0, 10.0),
+            _reference_row(2, 10.0, 20.0),
+        ]
+    )
+
+    candidates = build_candidates("subject1", references, trace, "fps15")
+
+    rates = candidates.groupby("window_id")["sample_rate_hz"].first()
+    assert rates.loc[1] == pytest.approx(30.0)
+    assert rates.loc[2] == pytest.approx(15.0)
+
+
+def test_empty_window_keeps_six_failed_candidates() -> None:
+    from rppg_pipeline.rppg import build_candidates
+
+    time_sec = np.arange(0.0, 1.0, 1.0 / 30.0)
+    trace = _trace_frame(time_sec, _synthetic_rgb(time_sec, 1.2))
+    references = pd.DataFrame([_reference_row(1, 10.0, 20.0)])
+
+    candidates = build_candidates("subject1", references, trace, "fps10")
+
+    assert len(candidates) == 6
+    assert candidates["window_status"].eq("low_video_coverage").all()
+    assert candidates["n_frames"].eq(0).all()
+    assert candidates["sample_rate_hz"].isna().all()
+    assert candidates["rppg_hr_bpm"].isna().all()
+
+
 def _synthetic_rgb(time_sec: np.ndarray, pulse_hz: float) -> np.ndarray:
     pulse = np.sin(2.0 * np.pi * pulse_hz * time_sec)
     motion = 0.004 * np.sin(2.0 * np.pi * 0.15 * time_sec)
@@ -95,6 +137,18 @@ def _synthetic_rgb(time_sec: np.ndarray, pulse_hz: float) -> np.ndarray:
     green = 140.0 * (1.0 + 0.010 * pulse + motion)
     blue = 120.0 * (1.0 + 0.005 * pulse + motion)
     return np.column_stack([red, green, blue])
+
+
+def _reference_row(window_id: int, start: float, end: float) -> dict[str, object]:
+    return {
+        "subject": "subject1",
+        "window_id": window_id,
+        "start_time_sec": start,
+        "end_time_sec": end,
+        "duration_sec": end - start,
+        "reference_hr_bpm": 72.0,
+        "reference_valid": True,
+    }
 
 
 def _trace_frame(time_sec: np.ndarray, rgb: np.ndarray) -> pd.DataFrame:

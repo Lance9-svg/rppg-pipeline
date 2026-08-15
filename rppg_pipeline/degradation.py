@@ -28,6 +28,8 @@ def select_frame_indices(
     selected = []
     for target in targets:
         candidates = np.flatnonzero(available)
+        if not len(candidates):
+            break
         nearest = int(candidates[np.argmin(np.abs(times[candidates] - target))])
         selected.append(nearest)
         available[nearest] = False
@@ -37,6 +39,8 @@ def select_frame_indices(
 # Calculate whole-window rate
 def effective_sample_rate(time_sec: np.ndarray) -> float:
     times = np.asarray(time_sec, dtype=float)
+    if len(times) < 2:
+        return np.nan
     return float((len(times) - 1) / (times[-1] - times[0]))
 
 
@@ -76,3 +80,21 @@ def downsample_window(
         target_fps,
     )
     return window.iloc[selected].reset_index(drop=True)
+
+
+# Downsample all reference windows
+def downsample_trace(
+    trace: pd.DataFrame,
+    references: pd.DataFrame,
+    target_fps: float,
+) -> pd.DataFrame:
+    windows = [
+        downsample_window(
+            trace,
+            float(reference.start_time_sec),
+            float(reference.end_time_sec),
+            target_fps,
+        )
+        for reference in references.itertuples(index=False)
+    ]
+    return pd.concat(windows, ignore_index=True)
